@@ -76,17 +76,18 @@ tick("rt")
 # ---------- AMB: a bed per space, crossfaded at the space change ----------
 def amb_carriage():
     rumble = norm(bnoise(30, 180)) * (1 + .25 * np.sin(2 * np.pi * .3 * t))
-    clack = np.zeros(N); k = tone(90, .12, 40, (1, .6, .3)) + band(noise(int(.12 * SR)), 800, 3000) * np.exp(-np.arange(int(.12 * SR)) / SR * 50) * .5
+    clack = np.zeros(N); k = tone(90, .12, 40, (1, .6, .3)) + band(noise(int(.12 * SR)), 200, 900) * np.exp(-np.arange(int(.12 * SR)) / SR * 60) * .15
     for s in np.arange(.2, DUR, 1.15): place(clack, s, k); place(clack, s + .16, k, .8)   # clickety-clack
-    return rumble + norm(clack) * .7
+    return rumble + norm(clack) * .35
 
-def amb_crickets(n=6):
-    L = 1 << 20; tl = t[:L]; out = np.zeros(L, np.float32)   # a ~24s cricket loop, tiled
+def amb_crickets(n=5):
+    L = 1 << 20; out = np.zeros(L); tt = np.arange(int(.018 * SR)) / SR   # ~24s loop, tiled
     for c in range(n):
-        f = 4200 + c * 260; ph = rng.uniform(0, 1); rate = rng.uniform(.6, 1.1)
-        gate = (np.sin(2 * np.pi * (rate * tl + ph)) > .55) * (np.sin(2 * np.pi * 28 * tl) > 0)
-        out += (np.sin(2 * np.pi * f * tl) * gate * rng.uniform(.5, 1)).astype(np.float32)
-    return norm(np.tile(out, N // L + 1)[:N].astype(float))
+        f = rng.uniform(4300, 5200); pulse = np.sin(2 * np.pi * f * tt) * np.hanning(len(tt)); chirp = np.zeros(int(.12 * SR))
+        for q in range(3): j = int(q * .034 * SR); chirp[j:j + len(pulse)] += pulse
+        per, g = rng.uniform(.55, .95), rng.uniform(.3, 1); s0 = rng.uniform(0, per)
+        while s0 < L / SR - .2: i = int(s0 * SR); out[i:i + len(chirp)] += chirp * g * rng.uniform(.6, 1); s0 += per * rng.uniform(.85, 1.15)
+    return norm(np.tile(band(out, 3500, 6500), N // L + 1)[:N])
 
 def wind():
     return norm(bnoise(200, 1200)) * (.6 + .4 * np.sin(2 * np.pi * .07 * t))
@@ -101,16 +102,16 @@ def amb_river():
     return water + norm(birds) * .5
 
 def amb_street():
-    murmur = norm(bnoise(250, 1800)) * (1 + .4 * np.abs(np.sin(2 * np.pi * .9 * t)) * np.sin(2 * np.pi * .23 * t))
+    murmur = norm(bnoise(180, 800)) * .5 * (1 + .4 * np.abs(np.sin(2 * np.pi * .9 * t)) * np.sin(2 * np.pi * .23 * t))
     bells = np.zeros(N)
     for s in np.arange(F["f10"] + 4, F["f12"], 9.0): place(bells, s, tone(2350, .8, 5, (1, .3, .1))); place(bells, s + .18, tone(2350, .8, 5, (1, .3, .1)))
     return murmur + norm(bells) * .35
 
 def amb_platform():
-    hum = norm(np.sin(2 * np.pi * 100 * t) + .5 * np.sin(2 * np.pi * 200 * t) + bnoise(80, 300))
+    hum = norm(bnoise(60, 260))
     return hum * .5 + norm(bnoise(300, 1500)) * .5 + amb_crickets(3) * .3
 
-BEDS = dict(carriage=amb_carriage(), road=amb_crickets() + wind() * .6, river=amb_river(), train=wind() * .7 + amb_crickets(4) * .5 + norm(bnoise(30, 120)) * .5,
+BEDS = dict(carriage=amb_carriage(), road=amb_crickets() * .45 + wind() * .6, river=amb_river(), train=wind() * .7 + amb_crickets(4) * .3 + norm(bnoise(30, 120)) * .5,
             street=amb_street(), platform=amb_platform())
 tick("beds")
 order = sorted(F, key=F.get); amb = np.zeros(N)
@@ -121,7 +122,7 @@ for k in order:
 for i, (loc, a) in enumerate(spans):
     b = spans[i + 1][1] if i + 1 < len(spans) else DUR + 2
     amb += BEDS[loc] * env(a, b, 2.0, 2.0)
-amb *= db(-24)
+amb *= db(-29)
 
 # ---------- FOL: on-screen business ----------
 fol = np.zeros(N)
@@ -143,18 +144,35 @@ def whistle(d=2.4):
     tt = np.arange(int(d * SR)) / SR; f = 520 + 8 * np.sin(2 * np.pi * 5 * tt)
     ph = 2 * np.cumsum(np.pi * f / SR); body = np.sin(ph) + .6 * np.sin(1.26 * ph) + .3 * np.sin(1.5 * ph)
     return (body + band(noise(len(tt)), 1000, 4000) * .3) * np.minimum(1, tt / .2) * np.minimum(1, (d - tt) / .6)
-place(sfx, .3, whistle(), .8)                      # the night train announces itself
-place(sfx, F["f13"] + 7.0 * CALM, whistle(3.0), .7)  # and leaves
+place(sfx, .3, band(whistle(), 300, 2200), .12)                      # the night train announces itself
+place(sfx, F["f13"] + 7.0 * CALM, band(whistle(3.0), 300, 2200), .14)  # and leaves
 for k in order:   # station light sweeps through the carriage window (direct.js: per 7.5s, peak at u=.11)
     if LOC[k] != "carriage": continue
     nxt = next((F[j] for j in order if F[j] > F[k]), DUR)
     for n in range(0, 20):
         s = (START[k] + n * 7.5 - 2 + .3) * CALM
-        if F[k] < s < nxt: place(sfx, s, band(noise(int(1.4 * SR)), 400, 2500) * np.sin(np.pi * np.arange(int(1.4 * SR)) / (1.4 * SR)) ** 2, .35)
+        if F[k] < s < nxt: place(sfx, s, band(noise(int(1.4 * SR)), 300, 1200) * np.sin(np.pi * np.arange(int(1.4 * SR)) / (1.4 * SR)) ** 2, .1)
 for k in ("f04", "f07", "f10", "f12"):   # crumpled-paper wipe at each act opener
-    place(sfx, F[k], band(noise(int(.7 * SR)), 1200, 8000) * (np.abs(np.sin(np.arange(int(.7 * SR)) / SR * 60)) ** 3), .8)
+    place(sfx, F[k], band(noise(int(.7 * SR)), 1200, 8000) * (np.abs(np.sin(np.arange(int(.7 * SR)) / SR * 60)) ** 3), .35)
 place(sfx, F["f12"] + 1.5, sum(tone(f, 2.5, 1.5) for f in (660, 830)), .4)   # platform bell
+CAKES = [float(x) for x in re.search(r"CAKES = \[([^\]]*)\]", (FILM / "lib/cakes.js").read_text()).group(1).split(",")]
+CK = [(START["f02"] + c) * CALM for c in CAKES]
+def horn(d=.4):
+    tt = np.arange(int(d * SR)) / SR; f = 420 + 40 * np.sin(2 * np.pi * 11 * tt) + 120 * tt / d; ph = 2 * np.pi * np.cumsum(f) / SR
+    return band(np.sign(np.sin(ph)) * .6 + np.sin(2 * ph) * .3, 300, 3000) * np.minimum(1, tt / .02) * np.minimum(1, (d - tt) / .08)
+pop = lambda: band(noise(int(.08 * SR)), 300, 3000) * np.exp(-np.arange(int(.08 * SR)) / SR * 60)
+for i, c0 in enumerate(CK):
+    place(sfx, c0, pop(), .9); place(sfx, c0 + .03, band(noise(int(.35 * SR)), 3000, 9000) * np.exp(-np.arange(int(.35 * SR)) / SR * 9), .25)   # confetti
+    if i % 2 == 0: place(sfx, c0 + .05, horn(.4 if i < 4 else .22), .35 if i < 6 else .22)
 sfx = norm(sfx) * db(-12)
+# Happy Birthday (public domain melody) on a music box, faster with every cake
+HB = [(67, .75), (67, .25), (69, 1), (67, 1), (72, 1), (71, 2), (67, .75), (67, .25), (69, 1), (67, 1), (74, 1), (72, 2),
+      (67, .75), (67, .25), (79, 1), (76, 1), (72, 1), (71, 1), (69, 2), (77, .75), (77, .25), (76, 1), (72, 1), (74, 1), (72, 2)]
+bday = np.zeros(N); s0, k = CK[0] - .05, 0
+while s0 < CK[-1] + .4:
+    note, beats = HB[k % len(HB)]; beat = .3 * max(.35, 1 - (s0 - CK[0]) / (CK[-1] - CK[0] + 1e-9) * .65)
+    place(bday, s0, tone(440 * 2 ** ((note - 69) / 12), .6, 5, (1, .25, .08))); s0 += beats * beat; k += 1
+bday = norm(bday) * db(-17)
 
 tick("sfx")
 # ---------- MUS: soft pad + music-box, named beats, ducked under dialogue ----------
@@ -168,6 +186,7 @@ for i, s in enumerate(np.arange(0, DUR, bar)):
 # named beats: M1 in at the first question, swells at act openers, rests on the river, resolves at the stop
 shape = .25 * env(4, DUR, 4, 3) + .5 * env(F["f04"] - 1, F["f04"] + 8, 2, 4) + .6 * env(F["f07"] - 1, F["f07"] + 10, 2, 5) \
       + .4 * env(F["f10"] - 1, F["f10"] + 8, 2, 4) + .9 * env(F["f12"], DUR, 3, 3)
+shape *= 1 - .85 * env(CK[0] - .3, CK[-1] + .5, .4, 1.2)
 mus = (norm(pad) * .7 + norm(box) * .5) * shape
 talking = np.zeros(N)
 for a, b in LINES["T"] + LINES["C"]: talking[int(a * SR):int(b * SR)] = 1
@@ -183,8 +202,8 @@ v = np.interp(np.arange(int(len(v) * SR / vsr)) / SR, np.arange(len(v)) / vsr, v
 vo = np.zeros(N); vo[:len(v)] = v[:N]
 vo = vo / (np.sqrt(np.mean(vo[np.abs(vo) > .01] ** 2)) + 1e-12) * .1   # dialogue RMS is the 0 dB reference
 beds = rt + amb
-L = vo + beds * 1.0 + fol * .9 + sfx * .8 + mus * 1.0
-R = vo + beds * .9 + fol * 1.0 + sfx * 1.0 + mus * .9   # a little width on everything but the voice
+L = vo + beds * 1.0 + fol * .9 + sfx * .8 + mus * 1.0 + bday
+R = vo + beds * .9 + fol * 1.0 + sfx * 1.0 + mus * .9 + bday   # a little width on everything but the voice
 mix = np.stack([L, R], 1); mix *= .5 / np.max(np.abs(mix))   # peak at -6 dBFS
 mix *= np.minimum(1, np.minimum(t / .3, (DUR - t) / 2.0))[:, None]
 with wave.open(str(FILM / "assets/mix.wav"), "w") as w:
