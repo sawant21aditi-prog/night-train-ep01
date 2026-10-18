@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+        #root { position: absolute; inset: 0; }
+        #f07-cv { position: absolute; inset: 0; width: 100%; height: 100%; }
+      </style>
+      <div id="root" data-composition-id="f07" data-width="1920" data-height="1080">
+        <canvas id="f07-cv" data-layout-allow-overflow></canvas>
+      </div>
+      <script>
+        // Scene 07 — acted coverage chosen by DIR (lib/direct.js) from who is speaking
+        (() => { const shot = DIR.frame('f07'); NT.mount('f07', 34.34, (c, t) => { shot(c, t); NT.bloom(c, .3, 20); AN.finish(c, t, { bars: 110 }); }, { fade: 0 }); })();
+      </script>
+    </template>
+  </body>
+</html>

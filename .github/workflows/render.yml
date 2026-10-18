@@ -1,0 +1,29 @@
+# Renders the episode on a free GitHub cloud computer (4 CPUs, 16 GB) and attaches the MP4 to the run.
+name: render
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install numpy
+      - name: Sound mix (five layers)
+        run: python sound_mix.py .
+      - name: Render
+        run: npx --yes hyperframes@0.8.172 render --fps 24 --quality looks --workers 4 -o renders/night-train-ep01-return-road.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: night-train-ep01
+          path: renders/night-train-ep01-return-road.mp4
+          retention-days: 30

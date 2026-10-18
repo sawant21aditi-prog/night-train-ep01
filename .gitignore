@@ -1,0 +1,6 @@
+renders/
+renders-log.txt
+boards/
+.hyperframes/
+node_modules/
+assets/mix.wav
