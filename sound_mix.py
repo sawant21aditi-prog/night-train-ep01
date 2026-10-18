@@ -161,9 +161,10 @@ def horn(d=.4):
     tt = np.arange(int(d * SR)) / SR; f = 420 + 40 * np.sin(2 * np.pi * 11 * tt) + 120 * tt / d; ph = 2 * np.pi * np.cumsum(f) / SR
     return band(np.sign(np.sin(ph)) * .6 + np.sin(2 * ph) * .3, 300, 3000) * np.minimum(1, tt / .02) * np.minimum(1, (d - tt) / .08)
 pop = lambda: band(noise(int(.08 * SR)), 300, 3000) * np.exp(-np.arange(int(.08 * SR)) / SR * 60)
+bfx = np.zeros(N)   # birthday effects: their own track, so they can step under the dialogue
 for i, c0 in enumerate(CK):
-    place(sfx, c0, pop(), .9); place(sfx, c0 + .03, band(noise(int(.35 * SR)), 3000, 9000) * np.exp(-np.arange(int(.35 * SR)) / SR * 9), .25)   # confetti
-    if i % 2 == 0: place(sfx, c0 + .05, horn(.4 if i < 4 else .22), .35 if i < 6 else .22)
+    place(bfx, c0, pop(), .9 if i < 2 else .35)
+    if i < 2: place(bfx, c0 + .03, band(noise(int(.35 * SR)), 3000, 9000) * np.exp(-np.arange(int(.35 * SR)) / SR * 9), .25); place(bfx, c0 + .05, horn(.4), .35)   # confetti + horn only on "cake" and "another one"
 sfx = norm(sfx) * db(-12)
 # Happy Birthday (public domain melody) on a music box, faster with every cake
 HB = [(67, .75), (67, .25), (69, 1), (67, 1), (72, 1), (71, 2), (67, .75), (67, .25), (69, 1), (67, 1), (74, 1), (72, 2),
@@ -172,7 +173,7 @@ bday = np.zeros(N); s0, k = CK[0] - .05, 0
 while s0 < CK[-1] + .4:
     note, beats = HB[k % len(HB)]; beat = .3 * max(.35, 1 - (s0 - CK[0]) / (CK[-1] - CK[0] + 1e-9) * .65)
     place(bday, s0, tone(440 * 2 ** ((note - 69) / 12), .6, 5, (1, .25, .08))); s0 += beats * beat; k += 1
-bday = norm(bday) * db(-17)
+bday = norm(bday) * db(-22) + norm(bfx) * db(-14)
 
 tick("sfx")
 # ---------- MUS: soft pad + music-box, named beats, ducked under dialogue ----------
@@ -201,6 +202,7 @@ with wave.open(str(FILM / "assets/voice.wav")) as w:
 v = np.interp(np.arange(int(len(v) * SR / vsr)) / SR, np.arange(len(v)) / vsr, v)
 vo = np.zeros(N); vo[:len(v)] = v[:N]
 vo = vo / (np.sqrt(np.mean(vo[np.abs(vo) > .01] ** 2)) + 1e-12) * .1   # dialogue RMS is the 0 dB reference
+bday *= db(0) * (1 - duck) + db(-16) * duck   # the birthday layer ducks hard under any line
 beds = rt + amb
 L = vo + beds * 1.0 + fol * .9 + sfx * .8 + mus * 1.0 + bday
 R = vo + beds * .9 + fol * 1.0 + sfx * 1.0 + mus * .9 + bday   # a little width on everything but the voice
